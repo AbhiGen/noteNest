@@ -1,21 +1,10 @@
-/**
- * @file note.routes.js
- * @description Note management REST API endpoints.
- * 
- * Endpoints:
- *   GET    /api/notes      - List all notes for authenticated user (supports ?search & ?tag)
- *   POST   /api/notes      - Create a new note
- *   GET    /api/notes/:id  - Get a specific note by ID
- *   PUT    /api/notes/:id  - Update a note
- *   DELETE /api/notes/:id  - Delete a note
- * 
- * Security:
- *   All endpoints use the `protect` middleware to guarantee valid authentication
- *   before reaching any controller logic.
- */
+// note.routes.js - Express Router for Note API Endpoints
+// This file maps HTTP URL paths and methods (GET, POST, PUT, DELETE) to their controller functions.
 
 const express = require('express');
 const router = express.Router();
+
+// Import controller functions that contain the database logic
 const {
   getNotes,
   getNoteById,
@@ -23,15 +12,18 @@ const {
   updateNote,
   deleteNote,
 } = require('../controllers/note.controller');
-const { protect } = require('../middleware/auth.middleware');
 
-// Protect all note routes with JWT authentication middleware
-router.use(protect);
-
+// Route for /api/notes
+// GET  /api/notes -> List all notes (supports ?search= and ?tag= query params)
+// POST /api/notes -> Create a new note
 router.route('/')
   .get(getNotes)
   .post(createNote);
 
+// Route for /api/notes/:id
+// GET    /api/notes/:id -> Fetch one specific note by its MongoDB _id
+// PUT    /api/notes/:id -> Update an existing note by its _id
+// DELETE /api/notes/:id -> Delete a note by its _id
 router.route('/:id')
   .get(getNoteById)
   .put(updateNote)

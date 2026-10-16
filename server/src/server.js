@@ -1,37 +1,30 @@
-/**
- * @file server.js
- * @description HTTP server startup and database connection initiation.
- * 
- * Purpose:
- *   Connects to MongoDB and binds the Express application to the designated TCP port.
- */
+// server.js - Backend Entry Point
+// This file initializes and starts our Express HTTP server and connects to the database.
 
 const app = require('./app');
 const connectDB = require('./config/db');
 
+// Set the port number from environment variables or default to 5000
 const PORT = process.env.PORT || 5000;
 
-// Connect to MongoDB and start Express HTTP server
+// Start database connection first, then start listening for HTTP requests
 const startServer = async () => {
   try {
+    // 1. Connect to MongoDB database
     await connectDB();
-    const server = app.listen(PORT, () => {
-      console.log(`===============================================`);
-      console.log(`🚀 NoteNest Server running in ${process.env.NODE_ENV || 'development'} mode`);
-      console.log(`🌐 Listening on http://localhost:${PORT}`);
-      console.log(`📡 Health Check: http://localhost:${PORT}/api/health`);
-      console.log(`===============================================`);
-    });
 
-    // Handle unhandled promise rejections gracefully
-    process.on('unhandledRejection', (err) => {
-      console.error(`Unhandled Rejection Error: ${err.message}`);
-      server.close(() => process.exit(1));
+    // 2. Start the Express server on specified PORT
+    app.listen(PORT, () => {
+      console.log(`===============================================`);
+      console.log(`🚀 NoteNest Server running on http://localhost:${PORT}`);
+      console.log(`📡 Health Check URL: http://localhost:${PORT}/api/health`);
+      console.log(`===============================================`);
     });
   } catch (error) {
-    console.error(`Failed to start server: ${error.message}`);
-    process.exit(1);
+    console.error('Failed to start server:', error.message);
+    process.exit(1); // Exit process if server cannot connect or start
   }
 };
 
+// Execute start server function
 startServer();

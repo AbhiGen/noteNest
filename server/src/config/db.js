@@ -1,36 +1,27 @@
-/**
- * @file db.js
- * @description MongoDB connection configuration using Mongoose.
- * 
- * Purpose:
- *   Establishes and monitors the connection between our Node.js/Express
- *   application and the MongoDB database instance.
- * 
- * Evaluator Explanation:
- *   "This file encapsulates the database connection logic using Mongoose.
- *    By separating it into its own module, we can connect on server startup
- *    or connect/disconnect cleanly in automated integration test suites."
- */
+// db.js - MongoDB Connection Configuration
+// This file connects our Express application to MongoDB using the Mongoose ODM library.
 
 const mongoose = require('mongoose');
 
-/**
- * Connect to MongoDB with connection error handling.
- * @returns {Promise<typeof mongoose>} Mongoose connection instance
- */
-const connectDB = async () => {
+// Asynchronous function to connect to the MongoDB database
+async function connectDB() {
   try {
-    const conn = await mongoose.connect(process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/notenest');
-    console.log(`[MongoDB] Connected successfully: ${conn.connection.host}/${conn.connection.name}`);
-    return conn;
+    // Connect to database URI from .env or fallback to local MongoDB instance
+    const conn = await mongoose.connect(
+      process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/notenest'
+    );
+
+    console.log(`MongoDB connected successfully to host: ${conn.connection.host}`);
   } catch (error) {
-    console.error(`[MongoDB] Connection error: ${error.message}`);
-    // If not in a test environment, terminate process on database connection failure
+    console.error('Database connection failed:', error.message);
+
+    // If database connection fails outside of tests, stop the server
     if (process.env.NODE_ENV !== 'test') {
       process.exit(1);
     }
+
     throw error;
   }
-};
+}
 
 module.exports = connectDB;

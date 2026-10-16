@@ -1,17 +1,17 @@
 /**
  * @file Sidebar.jsx
- * @description Left Sidebar Navigation matching NoteNest reference layout.
+ * @description Left Sidebar Navigation matching NoteNest layout.
  * 
  * Features:
  * - NoteNest logo & brand title
- * - + New Note coral action button
- * - Navigation links: All Notes, Pinned, Archived, Trash with real counts
- * - Tags section with colored indicator dots and real note counts
- * - User profile badge & logout action
+ * - "+ New Note" primary action button
+ * - Navigation links: All Notes, Pinned, Archived, Trash with real note counts
+ * - Tags section with colored indicator dots and live note counts
+ * - Workspace badge
  * 
- * Comments for viva:
+ * Viva explanation:
  * // This component renders the left navigation sidebar.
- * // Note counts and tag counts are computed dynamically from actual database data.
+ * // Note counts and tag counts are computed dynamically from actual MongoDB notes.
  */
 
 import React from 'react';
@@ -42,13 +42,9 @@ const Sidebar = ({
   trashCount = 0,
   tagsWithCounts = [],
   onOpenCreateModal,
-  user,
-  onLogout,
   isOpenMobile,
   onCloseMobile,
 }) => {
-  // First initial of user name
-  const userInitial = user?.name ? user.name.charAt(0).toUpperCase() : 'U';
 
   const handleNavClick = (tab) => {
     onSelectTab(tab);
@@ -202,28 +198,6 @@ const Sidebar = ({
           )}
         </div>
 
-        {/* Bottom User Profile Section */}
-        <div className="sidebar-footer">
-          <div className="sidebar-user-info" title={user?.email}>
-            <div className="sidebar-user-avatar">{userInitial}</div>
-            <div className="sidebar-user-details">
-              <span className="sidebar-user-name">{user?.name || 'User'}</span>
-              <span className="sidebar-user-email">{user?.email}</span>
-            </div>
-          </div>
-          <button
-            id="sidebar-logout-btn"
-            type="button"
-            className="sidebar-logout-btn"
-            onClick={onLogout}
-            title="Log out"
-            aria-label="Log out"
-          >
-            <svg style={{ width: '1.2rem', height: '1.2rem' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
-          </button>
-        </div>
       </aside>
     </>
   );

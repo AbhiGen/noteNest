@@ -1,25 +1,8 @@
-/**
- * @file DashboardPage.jsx
- * @description Main application workspace view matching NoteNest reference design.
- * 
- * Features:
- * - Left Sidebar with brand, New Note button, All Notes / Pinned navigation, dynamic tag counts, user profile
- * - Top Search Bar with debounced search and Grid/List view toggle
- * - Dedicated Pinned Notes section and Other Notes section
- * - Real dynamic note counts and tag counts
- * - Create & Edit Note modal and Delete confirmation modal
- * 
- * Comments for viva:
- * // This component manages the main dashboard workspace.
- * // This state stores the text entered in the search box.
- * // This state stores the currently selected navigation tab.
- * // This function loads the notes from the backend.
- * // This handler saves or updates the selected note.
- */
+// DashboardPage.jsx - Main Application Workspace
+// This is the primary page component that manages notes, search, filtering, and modals.
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
-import { useAuth } from '../context/AuthContext';
 import Sidebar from '../components/Sidebar';
 import NoteCard from '../components/NoteCard';
 import NoteModal from '../components/NoteModal';
@@ -27,47 +10,82 @@ import DeleteConfirmModal from '../components/DeleteConfirmModal';
 import '../styles/dashboard.css';
 
 const DashboardPage = () => {
-  const { user, logout } = useAuth();
+  // ==========================================
+  // 1. STATE VARIABLES
+  // ==========================================
 
-  // Notes state
+  // WHAT: Stores the list of notes fetched from MongoDB.
+  // WHY: React components re-render automatically whenever state changes, updating the UI.
   const [notes, setNotes] = useState([]);
+
+  // WHAT: Tracks whether an API call is currently in progress.
+  // WHY: Gives visual feedback (spinner) so the user knows data is loading.
   const [loading, setLoading] = useState(true);
+
+  // WHAT: Stores any error message returned from the backend.
+  // WHY: Displays a friendly alert banner instead of crashing the app.
   const [error, setError] = useState('');
 
-  // This state stores the text entered in the search box.
+  // WHAT: Stores the text typed into the top search bar.
+  // WHY: Allows filtering notes in real-time by keyword.
   const [searchTerm, setSearchTerm] = useState('');
 
-  // This state stores the currently selected navigation tab ('all', 'pinned', 'archived', 'trash').
+  // WHAT: Stores which navigation tab is active ('all', 'pinned', 'archived', 'trash').
+  // WHY: Lets the user switch between all notes and pinned notes easily.
   const [currentTab, setCurrentTab] = useState('all');
 
-  // This state stores the currently selected tag filter.
+  // WHAT: Stores the currently selected tag filter (e.g. 'college' or 'project').
+  // WHY: Clicking a tag in the sidebar filters the workspace to only notes with that tag.
   const [selectedTag, setSelectedTag] = useState('');
 
-  // View mode toggle: 'grid' or 'list'
+  // WHAT: Stores layout view mode: 'grid' (cards in rows/columns) or 'list' (stacked full width).
+  // WHY: Gives users flexibility in how they view their notes.
   const [viewMode, setViewMode] = useState('grid');
 
-  // Mobile drawer state
+  // WHAT: Tracks whether the mobile drawer navigation is open.
+  // WHY: Provides a responsive sidebar for mobile and tablet screens.
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // Note Modal (Create / Edit) state
+  // WHAT: Controls visibility of the Create / Edit Note modal dialog.
+  // WHY: Modals keep the user on the same page instead of navigating to a new URL.
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // WHAT: Holds the note currently being edited, or null if creating a brand new note.
+  // WHY: Allows the same NoteModal component to handle both Create and Edit operations.
   const [activeNote, setActiveNote] = useState(null);
+
+  // WHAT: Tracks if the Save button request is in progress.
+  // WHY: Prevents duplicate submissions if a user clicks "Save" multiple times quickly.
   const [isSaving, setIsSaving] = useState(false);
 
-  // Delete confirmation modal state
+  // WHAT: Holds state for the delete confirmation popup ({ isOpen: boolean, note: object }).
+  // WHY: Confirms user intent before permanently deleting data (defensive UX).
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, note: null });
+
+  // WHAT: Tracks if a delete HTTP request is currently processing.
+  // WHY: Shows a loading indicator on the delete button while backend deletes the note.
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // This function loads the notes from the backend.
-  const fetchNotes = useCallback(async (search = '', tag = '') => {
+
+  // ==========================================
+  // 2. DATA FETCHING (GET /api/notes)
+  // ==========================================
+
+  // WHAT: Fetches notes from Express backend using Axios.
+  // WHY: Connects frontend React with the MongoDB backend to load fresh data.
+  const fetchNotes = async (search = '', tag = '') => {
     setLoading(true);
     setError('');
+
     try {
+      // Build optional query parameters for search and tag
       const params = {};
       if (search.trim()) params.search = search.trim();
       if (tag.trim()) params.tag = tag.trim();
 
+      // Send GET request to /api/notes
       const res = await api.get('/notes', { params });
+
       if (res.data.success) {
         setNotes(res.data.notes || []);
       }
@@ -75,76 +93,98 @@ const DashboardPage = () => {
       console.error('Error fetching notes:', err);
       setError(err.response?.data?.message || 'Failed to load notes. Please check connection.');
     } finally {
+      // Always turn off loading spinner once request finishes
       setLoading(false);
     }
-  }, []);
+  };
 
-  // Fetch notes with debounced search query
+
+  // ==========================================
+  // 3. SEARCH DEBOUNCING (useEffect)
+  // ==========================================
+
+  // WHAT: Delays calling fetchNotes by 250 milliseconds after user types in search box.
+  // WHY: Without debouncing, an HTTP request fires on every keystroke, which overloads the server.
+  //      Debouncing waits until the user finishes typing before making the network call.
   useEffect(() => {
-    const delayDebounceFn = setTimeout(() => {
+    const timer = setTimeout(() => {
       fetchNotes(searchTerm, selectedTag);
     }, 250);
 
-    return () => clearTimeout(delayDebounceFn);
-  }, [searchTerm, selectedTag, fetchNotes]);
+    // Cleanup: cancels previous timer if user types another letter before 250ms passes
+    return () => clearTimeout(timer);
+  }, [searchTerm, selectedTag]);
 
-  // Compute dynamic tag counts directly from real database notes
-  const tagsWithCounts = useMemo(() => {
-    const counts = {};
-    notes.forEach((note) => {
-      if (Array.isArray(note.tags)) {
-        note.tags.forEach((t) => {
-          counts[t] = (counts[t] || 0) + 1;
-        });
-      }
-    });
-    return Object.entries(counts).map(([name, count]) => ({ name, count }));
-  }, [notes]);
 
-  // Counts for sidebar
+  // ==========================================
+  // 4. COMPUTED COUNTS & FILTERING (Helpers)
+  // ==========================================
+
+  // WHAT: Counts how many notes exist for each tag.
+  // WHY: The sidebar displays real badges with note counts next to each tag (e.g. #college (3)).
+  const tagCountsMap = {};
+  notes.forEach((note) => {
+    if (Array.isArray(note.tags)) {
+      note.tags.forEach((tag) => {
+        tagCountsMap[tag] = (tagCountsMap[tag] || 0) + 1;
+      });
+    }
+  });
+  const tagsWithCounts = Object.entries(tagCountsMap).map(([name, count]) => ({
+    name,
+    count,
+  }));
+
+  // Counts for sidebar badges
   const totalCount = notes.length;
-  const pinnedCount = useMemo(() => notes.filter((n) => n.isPinned).length, [notes]);
+  const pinnedCount = notes.filter((n) => n.isPinned).length;
 
-  // Filter notes based on active sidebar tab
-  const displayedNotes = useMemo(() => {
-    if (currentTab === 'pinned') {
-      return notes.filter((n) => n.isPinned);
-    }
-    if (currentTab === 'archived' || currentTab === 'trash') {
-      return []; // Clean empty state for future archive/trash feature
-    }
-    return notes;
-  }, [notes, currentTab]);
+  // WHAT: Filters notes based on the active sidebar tab.
+  // WHY: If user clicks "Pinned", only show pinned notes; otherwise show all notes.
+  let displayedNotes = notes;
+  if (currentTab === 'pinned') {
+    displayedNotes = notes.filter((n) => n.isPinned);
+  } else if (currentTab === 'archived' || currentTab === 'trash') {
+    displayedNotes = []; // Clean empty view for archived/trash categories
+  }
 
-  // Split into pinned and other notes for 'all' tab
-  const pinnedNotes = useMemo(() => displayedNotes.filter((n) => n.isPinned), [displayedNotes]);
-  const otherNotes = useMemo(() => displayedNotes.filter((n) => !n.isPinned), [displayedNotes]);
+  // Split displayed notes into Pinned vs Others for organized dashboard layout
+  const pinnedNotes = displayedNotes.filter((n) => n.isPinned);
+  const otherNotes = displayedNotes.filter((n) => !n.isPinned);
 
-  // Open modal for creating a new note
+
+  // ==========================================
+  // 5. MODAL HANDLERS (Create, Edit, Delete)
+  // ==========================================
+
+  // WHAT: Opens modal in "Create" mode.
+  // WHY: Sets activeNote to null so the modal opens with blank input fields.
   const handleOpenCreateModal = () => {
     setActiveNote(null);
     setIsModalOpen(true);
   };
 
-  // Open modal for editing an existing note
+  // WHAT: Opens modal in "Edit" mode with existing note data.
+  // WHY: Passes the selected note to activeNote so the form pre-fills title, content, and tags.
   const handleOpenEditModal = (note) => {
     setActiveNote(note);
     setIsModalOpen(true);
   };
 
-  // This handler saves or updates the selected note.
+  // WHAT: Saves note (POST if new, PUT if updating).
+  // WHY: Uses one clean function to handle both creation and editing.
   const handleSaveNote = async (noteData) => {
     setIsSaving(true);
     try {
       if (activeNote) {
-        // PUT /api/notes/:id - Update existing note
+        // Editing existing note: PUT /api/notes/:id
         const res = await api.put(`/notes/${activeNote._id}`, noteData);
         if (res.data.success) {
           setIsModalOpen(false);
           fetchNotes(searchTerm, selectedTag);
         }
       } else {
-        // POST /api/notes - Create new note
+        // Creating new note: POST /api/notes
         const res = await api.post('/notes', noteData);
         if (res.data.success) {
           setIsModalOpen(false);
@@ -158,7 +198,8 @@ const DashboardPage = () => {
     }
   };
 
-  // This handler toggles the pinned status of a note.
+  // WHAT: Toggles the pinned status of a note directly from the card.
+  // WHY: Users can quickly pin or unpin notes with one click without opening the edit form.
   const handleTogglePin = async (note) => {
     try {
       const res = await api.put(`/notes/${note._id}`, {
@@ -172,17 +213,19 @@ const DashboardPage = () => {
     }
   };
 
-  // Open delete confirmation modal
+  // WHAT: Opens the delete confirmation dialog.
+  // WHY: Stores the note object so the modal can display the note's title before deleting.
   const handleOpenDeleteModal = (note) => {
     setDeleteModal({ isOpen: true, note });
   };
 
-  // Confirm and permanently delete note
+  // WHAT: Permanently deletes the note from MongoDB via DELETE /api/notes/:id.
+  // WHY: Executes deletion only after user confirms in the modal popup.
   const handleConfirmDelete = async () => {
     if (!deleteModal.note) return;
     setIsDeleting(true);
+
     try {
-      // DELETE /api/notes/:id
       const res = await api.delete(`/notes/${deleteModal.note._id}`);
       if (res.data.success) {
         setDeleteModal({ isOpen: false, note: null });
@@ -195,7 +238,8 @@ const DashboardPage = () => {
     }
   };
 
-  // Compute view heading title
+  // WHAT: Computes dynamic heading title based on active filter.
+  // WHY: Informs user what filter is currently applied (e.g., "Notes tagged with #college").
   const getViewTitle = () => {
     if (selectedTag) return `Notes tagged with #${selectedTag}`;
     if (currentTab === 'pinned') return 'Pinned Notes';
@@ -204,9 +248,13 @@ const DashboardPage = () => {
     return 'All Notes';
   };
 
+
+  // ==========================================
+  // 6. RENDER USER INTERFACE
+  // ==========================================
   return (
     <div className="app-container">
-      {/* Left Sidebar */}
+      {/* 6.1. Left Sidebar Navigation */}
       <Sidebar
         currentTab={currentTab}
         onSelectTab={setCurrentTab}
@@ -218,17 +266,15 @@ const DashboardPage = () => {
         trashCount={0}
         tagsWithCounts={tagsWithCounts}
         onOpenCreateModal={handleOpenCreateModal}
-        user={user}
-        onLogout={logout}
         isOpenMobile={isMobileMenuOpen}
         onCloseMobile={() => setIsMobileMenuOpen(false)}
       />
 
-      {/* Main Workspace */}
+      {/* 6.2. Main Workspace */}
       <div className="main-workspace">
         {/* Top Header Bar */}
         <header className="top-header">
-          {/* Mobile hamburger menu */}
+          {/* Mobile hamburger menu button */}
           <button
             type="button"
             className="mobile-menu-btn"
@@ -240,7 +286,7 @@ const DashboardPage = () => {
             </svg>
           </button>
 
-          {/* Search Box */}
+          {/* Search Box Input */}
           <div className="search-box-wrap">
             <svg className="search-box-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -253,6 +299,7 @@ const DashboardPage = () => {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
+            {/* Clear search button appears only when text is present */}
             {searchTerm && (
               <button
                 type="button"
@@ -266,7 +313,7 @@ const DashboardPage = () => {
             )}
           </div>
 
-          {/* Top Right Controls: Grid / List view toggle */}
+          {/* Grid / List View Toggle Buttons */}
           <div className="top-header-controls">
             <div className="view-mode-toggle" title="Switch layout view">
               <button
@@ -297,7 +344,7 @@ const DashboardPage = () => {
 
         {/* Content Area */}
         <main className="content-area">
-          {/* Content Header Title */}
+          {/* Header Title & Note Count */}
           <div className="content-header">
             <div>
               <h1>{getViewTitle()}</h1>
@@ -321,14 +368,14 @@ const DashboardPage = () => {
             </span>
           </div>
 
-          {/* Error Notification */}
+          {/* Error Banner */}
           {error && (
             <div className="alert alert-error" role="alert">
               <span>{error}</span>
             </div>
           )}
 
-          {/* Loading Indicator */}
+          {/* Loading Spinner */}
           {loading && (
             <div style={{ textAlign: 'center', padding: '3.5rem 0' }}>
               <div className="spinner spinner-primary"></div>
@@ -338,10 +385,10 @@ const DashboardPage = () => {
             </div>
           )}
 
-          {/* Notes Content */}
+          {/* Main Notes Content (shown when loading is false) */}
           {!loading && (
             <>
-              {/* Empty state when user has 0 notes */}
+              {/* Empty state: 0 notes in database */}
               {displayedNotes.length === 0 && !searchTerm && !selectedTag && currentTab === 'all' && (
                 <div className="empty-state">
                   <div className="empty-state-icon">
@@ -361,7 +408,7 @@ const DashboardPage = () => {
                 </div>
               )}
 
-              {/* Empty state for search / tag filter */}
+              {/* Empty state: No search or tag matches */}
               {displayedNotes.length === 0 && (searchTerm || selectedTag) && (
                 <div className="empty-state">
                   <div className="empty-state-icon" style={{ backgroundColor: 'var(--border)', color: 'var(--muted)' }}>
@@ -386,25 +433,10 @@ const DashboardPage = () => {
                 </div>
               )}
 
-              {/* Empty state for empty tabs (e.g. pinned with 0 notes) */}
-              {displayedNotes.length === 0 && !searchTerm && !selectedTag && currentTab !== 'all' && (
-                <div className="empty-state">
-                  <h3>No notes in {getViewTitle()}</h3>
-                  <p>You do not have any notes in this category right now.</p>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => setCurrentTab('all')}
-                  >
-                    View All Notes
-                  </button>
-                </div>
-              )}
-
-              {/* Tab: All Notes (shows Pinned Section + Other Section) */}
+              {/* Tab: All Notes View (shows Pinned Section + Other Section) */}
               {currentTab === 'all' && !selectedTag && !searchTerm && (
                 <>
-                  {/* Pinned Section */}
+                  {/* Pinned Notes Section */}
                   {pinnedNotes.length > 0 && (
                     <section className="notes-block">
                       <h2 className="notes-block-title">
@@ -451,7 +483,7 @@ const DashboardPage = () => {
                 </>
               )}
 
-              {/* Filtered View (by search, tag, or pinned tab) */}
+              {/* Filtered View (shown when search, tag, or pinned tab is active) */}
               {(currentTab !== 'all' || selectedTag || searchTerm) && displayedNotes.length > 0 && (
                 <div className={`notes-grid ${viewMode === 'list' ? 'list-view' : ''}`}>
                   {displayedNotes.map((note) => (
@@ -470,7 +502,7 @@ const DashboardPage = () => {
         </main>
       </div>
 
-      {/* Note Create / Edit Modal Form */}
+      {/* 6.3. Create / Edit Note Modal Popup */}
       <NoteModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -479,7 +511,7 @@ const DashboardPage = () => {
         isSaving={isSaving}
       />
 
-      {/* Safe Delete Confirmation Dialog */}
+      {/* 6.4. Delete Confirmation Modal Popup */}
       <DeleteConfirmModal
         isOpen={deleteModal.isOpen}
         onClose={() => setDeleteModal({ isOpen: false, note: null })}
